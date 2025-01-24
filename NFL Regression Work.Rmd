@@ -23,6 +23,8 @@ library(Metrics)
 
 ```{r}
 2+2
+
+10+10
 ```
 
 ##Import data from NFLverse
@@ -804,13 +806,13 @@ Incorporate into model from existing data
 - pagerank
 - weather?
 - strength of schedule (interacting?)
-- QB or coach change (from week 1?)
-- Current streak
+- QB or coach change (from week 1?) **
+- Current streak **
 - Record in previous x games
 - head to head record for last x years
-- Coming off big win/loss?
+- Coming off big win/loss?  **
 - Playoff implications
-- Long travel
+- Long travel **
 - new variables for last x games
 
 

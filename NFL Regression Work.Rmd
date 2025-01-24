@@ -21,6 +21,10 @@ library(nflfastR)
 library(Metrics)
 ```
 
+```{r}
+2+2
+```
+
 ##Import data from NFLverse
 
 Updated frequently, for play by play data, consider NFLfastR?

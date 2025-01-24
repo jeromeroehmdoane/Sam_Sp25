@@ -1,0 +1,839 @@
+---
+title: "NFL Regression"
+author: "Jerome Roehm"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+---
+
+# NFL Regression
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(message=FALSE)
+library(tidyverse)
+library(stats)
+library(PropCIs)
+library(binom)
+library(ggnewscale)
+library(plotly)
+library(gapminder)
+library(nflfastR)
+library(Metrics)
+```
+
+##Import data from NFLverse
+
+Updated frequently, for play by play data, consider NFLfastR?
+
+```{r}
+games <- read.csv('https://raw.githubusercontent.com/nflverse/nfldata/refs/heads/master/data/games.csv')
+games <- filter(games,season > 2002) #errors in NFLfastR end in 2002 (it seems)
+
+#current team names (how NFLfastR does it...)
+games$away_team[games$away_team=='STL'] <- 'LA'
+games$away_team[games$away_team=='SD'] <- 'LAC'
+games$away_team[games$away_team=='OAK'] <- 'LV'
+games$home_team[games$home_team=='STL'] <- 'LA'
+games$home_team[games$home_team=='SD'] <- 'LAC'
+games$home_team[games$home_team=='OAK'] <- 'LV'
+
+games
+```
+
+## Create giant datafrome
+
+Compute season wins, losses, ties, winning percentages and add to `games` dataframe
+
+Takes a few minutes to run
+
+```{r}
+games<- games %>% mutate(winner_ha = case_when(result>0 ~ 'home', 
+                                              result<0 ~ 'away',
+                                              TRUE ~ 'tie')) %>% 
+  mutate(winner_team = case_when(result>0 ~ home_team, 
+                                 result<0 ~ away_team,
+                                 TRUE ~ 'tie')) %>% 
+  mutate(loser_team = case_when(result<0 ~ home_team, 
+                                 result>0 ~ away_team,
+                                 TRUE ~ 'tie'))
+
+home_incoming_wins <- c(0)
+home_incoming_losses <- c(0)
+away_incoming_wins <- c(0)
+away_incoming_losses <- c(0)
+home_incoming_ties <- c(0)
+away_incoming_ties <- c(0)
+
+home_incoming_points_scored <- c(0)
+home_incoming_points_allowed <- c(0)
+away_incoming_points_scored <- c(0)
+away_incoming_points_allowed <- c(0)
+
+for (i in 2:nrow(games)) {
+  home_incoming_wins[i] <- nrow(filter(games[1:(i-1),],winner_team==games[i,]$home_team,
+                                       season==games[i,]$season))
+  home_incoming_losses[i] <- nrow(filter(games[1:(i-1),],loser_team==games[i,]$home_team,
+                                       season==games[i,]$season))
+  away_incoming_wins[i] <- nrow(filter(games[1:(i-1),],winner_team==games[i,]$away_team,
+                                       season==games[i,]$season))
+  away_incoming_losses[i] <- nrow(filter(games[1:(i-1),],loser_team==games[i,]$away_team,
+                                       season==games[i,]$season))
+  home_incoming_ties[i] <- nrow(filter(games[1:(i-1),],winner_team=='tie',home_team==games[i,]$home_team,
+                                       season==games[i,]$season)) +
+                           nrow(filter(games[1:(i-1),],winner_team=='tie',away_team==games[i,]$home_team,
+                                       season==games[i,]$season))
+  away_incoming_ties[i] <- nrow(filter(games[1:(i-1),],winner_team=='tie',home_team==games[i,]$away_team,
+                                       season==games[i,]$season)) +
+                           nrow(filter(games[1:(i-1),],winner_team=='tie',away_team==games[i,]$away_team,
+                                       season==games[i,]$season))
+  home_incoming_points_scored[i] <- sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               home_team==games[i,]$home_team)$home_score) +
+                                    sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               away_team==games[i,]$home_team)$away_score)
+  away_incoming_points_scored[i] <- sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               home_team==games[i,]$away_team)$home_score) +
+                                    sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               away_team==games[i,]$away_team)$away_score)
+  home_incoming_points_allowed[i] <- sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               home_team==games[i,]$home_team)$away_score) +
+                                    sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               away_team==games[i,]$home_team)$home_score)
+  away_incoming_points_allowed[i] <- sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               home_team==games[i,]$away_team)$away_score) +
+                                    sum(filter(games[1:(i-1),],
+                                               season==games[i,]$season,
+                                               away_team==games[i,]$away_team)$home_score)
+}
+
+games$home_incoming_wins <- home_incoming_wins
+games$home_incoming_losses <- home_incoming_losses
+games$home_incoming_ties <- home_incoming_ties
+games$home_incoming_points_scored <- home_incoming_points_scored
+games$home_incoming_points_allowed <- home_incoming_points_allowed
+games$away_incoming_wins <- away_incoming_wins
+games$away_incoming_losses <- away_incoming_losses
+games$away_incoming_ties <- away_incoming_ties
+games$away_incoming_points_scored <- away_incoming_points_scored
+games$away_incoming_points_allowed <- away_incoming_points_allowed
+```
+
+```{r}
+#adding more variables
+games <- games %>% 
+  mutate(rest_diff = home_rest - away_rest) %>% 
+  mutate(home_incoming_games = home_incoming_wins+home_incoming_losses+home_incoming_ties,
+         away_incoming_games = away_incoming_wins+away_incoming_losses+away_incoming_ties) %>% 
+  mutate(home_incoming_win_perc = ifelse(home_incoming_games==0, 0, home_incoming_wins / home_incoming_games),
+         away_incoming_win_perc = ifelse(away_incoming_games==0, 0, away_incoming_wins / away_incoming_games)) %>% 
+  mutate(win_perc_diff = home_incoming_win_perc-away_incoming_win_perc) %>% 
+  mutate(winner_01 = winner_ha=='home') %>% 
+  mutate(home_incoming_point_diff = home_incoming_points_scored - home_incoming_points_allowed,
+         away_incoming_point_diff = away_incoming_points_scored - away_incoming_points_allowed) %>% 
+  mutate(point_diff_diff = home_incoming_point_diff - away_incoming_point_diff) %>% 
+  mutate(wins_diff = home_incoming_wins - away_incoming_wins) %>% 
+  mutate(home_moneyline_prob = ifelse(home_moneyline>0,100/(home_moneyline+100),abs(home_moneyline)/(abs(home_moneyline)+100))) %>% 
+  mutate(away_moneyline_prob = ifelse(away_moneyline>0,100/(away_moneyline+100),abs(away_moneyline)/(abs(away_moneyline)+100))) %>% 
+  mutate(home_moneyline_prob_a = 1-away_moneyline_prob) %>% 
+  mutate(mean_moneyline_prob = (home_moneyline_prob+home_moneyline_prob_a)/2)
+```
+
+#### adding more variables with NFLfastR
+```{r}
+#takes a few minutes to run
+all_fastR_team_stats <- calculate_stats(
+  seasons = TRUE,
+  summary_level = 'week',
+  stat_type = 'team',
+  season_type = "REG+POST"
+)
+```
+
+```{r}
+#yards per play
+get_incoming_ypp <- function(season_num,
+                             week_num,
+                             team_name){
+  prior_games <- all_fastR_team_stats %>% filter(team==team_name,season==season_num,week<week_num)
+  prior_games <- mutate(prior_games,
+                  plays = attempts + sacks_suffered + carries,
+                  tot_yards = passing_yards + rushing_yards + sack_yards_lost)
+  if(sum(prior_games$plays)>0){
+    return(sum(prior_games$tot_yards)/sum(prior_games$plays))
+  }
+  return(5)
+}
+
+get_incoming_ypp_a <- function(season_num,
+                               week_num,
+                               team_name){
+  prior_games <- all_fastR_team_stats %>% filter(opponent_team==team_name,season==season_num,week<week_num)
+  prior_games <- mutate(prior_games,
+                  plays = attempts + sacks_suffered + carries,
+                  tot_yards = passing_yards + rushing_yards + sack_yards_lost)
+  if(sum(prior_games$plays)>0){
+    return(sum(prior_games$tot_yards)/sum(prior_games$plays))
+  }
+  return(5)
+}
+
+home_ypp <- c()
+home_ypp_a <- c()
+away_ypp <- c()
+away_ypp_a <- c()
+
+for (i in 1:nrow(games)) {
+  home_ypp[i] <- get_incoming_ypp(games[i,]$season,
+                             games[i,]$week,
+                             games[i,]$home_team)
+  home_ypp_a[i] <- get_incoming_ypp_a(games[i,]$season,
+                                 games[i,]$week,
+                                 games[i,]$home_team)
+  away_ypp[i] <- get_incoming_ypp(games[i,]$season,
+                             games[i,]$week,
+                             games[i,]$away_team)
+  away_ypp_a[i] <- get_incoming_ypp_a(games[i,]$season,
+                                 games[i,]$week,
+                                 games[i,]$away_team)
+}
+games$home_incoming_ypp <- home_ypp
+games$home_incoming_ypp_a <- home_ypp_a
+games$away_incoming_ypp <- away_ypp
+games$away_incoming_ypp_a <- away_ypp_a
+
+games <- games %>% 
+  mutate(home_incoming_ypp_diff = home_ypp - home_ypp_a) %>% 
+  mutate(away_incoming_ypp_diff = away_ypp - away_ypp_a) %>%
+  mutate(ypp_diff_diff = home_incoming_ypp_diff - away_incoming_ypp_diff)
+
+
+#turnovers
+select(filter(games, abs(ypp_diff_diff)>4),'game_id','home_incoming_ypp','home_incoming_ypp_a','away_incoming_ypp','away_incoming_ypp_a','ypp_diff_diff')
+
+
+#penalties
+
+
+
+#passing and rushing epa
+
+```
+
+## Plotting variable distributions
+
+```{r}
+no_ties <- filter(games,winner_ha != 'tie')
+wd_sum <- games %>%
+  group_by(winner_ha,wins_diff) %>% 
+  summarize(count = n()) %>% 
+  mutate(prop = count/sum(count))
+
+sp_sum <- games %>%
+  group_by(winner_ha,spread_line) %>% 
+  summarize(count = n()) %>% 
+  mutate(prop = count/sum(count))
+
+sp_sum2 <- games %>%
+  group_by(spread_line,winner_ha) %>% 
+  summarize(count = n()) %>% 
+  mutate(prop = count/sum(count))
+
+wd_sum2 <- games %>%
+  group_by(wins_diff,winner_ha) %>% 
+  summarize(count = n()) %>% 
+  mutate(prop = count/sum(count))
+
+ggplot(wd_sum2,aes(x=wins_diff,y=prop, color=winner_ha))+geom_line() + geom_point(aes(size=count))+
+  labs(title='Outcomes by Win Difference')
+ggplot(sp_sum2,aes(x=spread_line, y=prop, color=winner_ha))+geom_line() + geom_point(aes(size=count))+
+  labs(title='Outcomes by Spread')
+
+
+ggplot(wd_sum, aes(x = wins_diff, y=prop, color=winner_ha)) + geom_line() + geom_point(aes(size=count))+
+  labs(title='Density (mass) plot by Win Difference')
+ggplot(games, aes(x = point_diff_diff, color=winner_ha)) + geom_density()+
+  labs(title='Density Plot of Point Differential Difference')
+ggplot(games, aes(x = spread_line, color=winner_ha)) + geom_density()+
+  labs(title='Density Plot of Spread')
+ggplot(games, aes(x = mean_moneyline_prob, color=winner_ha)) + geom_density()+
+  labs(title='Density Plot of Moneyline (implied probability)')
+```
+```{r}
+#curiosity
+select(filter(games, wins_diff>9),game_id,away_score,home_score)
+```
+
+
+## Visualizing simple regression models
+
+```{r}
+games_sum_wd <- games %>%
+  group_by(wins_diff) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_wd, aes(x=wins_diff,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_wd,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home Winning by Win Difference', y='Home Win Prob')
+
+games_sum_wpd <- games %>%
+  group_by(win_perc_diff) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_wpd, aes(x=win_perc_diff,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_wpd,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home Winning by Win Percent Difference', y='Home Win Prob')
+
+games_sum_pdd <- games %>%
+  group_by(point_diff_diff) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_pdd, aes(x=point_diff_diff,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_pdd,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home Winning by Point Differential Difference', y='Home Win Prob')
+
+games_sum_sp <- games %>%
+  group_by(spread_line) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_sp, aes(x=spread_line,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_sp,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home Winning by Spread', y='Home Win Prob')
+
+
+
+games_sum_ml <- games %>%
+  group_by(home_moneyline_prob) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_ml, aes(x=home_moneyline_prob,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_ml,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home Winning by Moneyline (prob)', y='Home Win Prob')+
+  scale_size(range = c(1, 5),
+             breaks = c(10, 30))
+
+
+
+games_sum_yppdd <- games %>%
+  group_by(round(ypp_diff_diff,1)) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_yppdd, aes(x=`round(ypp_diff_diff, 1)`,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_yppdd,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home Winning by Yards per Play Differential Difference', y='Home Win Prob')
+
+games_sum_wd_d <- games %>%
+  group_by(wins_diff, div_game) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(games_sum_wd_d, aes(x=wins_diff,y=home_win_perc,weight=count, color=as.factor(div_game))) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = games_sum_wd_d,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Wins Diff and Divisional Game', y='Home Win Prob')
+```
+
+```{r}
+
+```
+
+```{r}
+#problems with NFLfastR
+get_incoming_ypp(1999,
+                 2,
+                'BAL')
+
+filter(all_fastR_team_stats,opponent_team=='LA', team=='STL')
+
+for(seasoni in 1999:2023){
+  for(weeki in 1:22){
+    if(nrow(filter(all_fastR_team_stats,season==seasoni,week==weeki))/2 != nrow(filter(games,season==seasoni,week==weeki))){
+      print( c(seasoni, weeki, nrow(filter(all_fastR_team_stats,season==seasoni,week==weeki))/2, nrow(filter(games,season==seasoni,week==weeki))))
+    }
+    }
+}
+
+
+
+```
+
+```{r}
+mod_wpd <- glm(winner_01 ~ win_perc_diff, family = binomial, data=games)
+
+densityPlot(mod_wpd$fitted.values)
+mean((mod_wpd$fitted.values>.5)==games$winner_01)
+mean(games$winner_01)
+
+mod_wpd_week <- glm(winner_01 ~ (win_perc_diff+week)^2, family = binomial, data=games)
+mean((mod_wpd_week$fitted.values>.5)==games$winner_01)
+```
+
+## Testing and comparing models
+
+```{r}
+
+games_c <- filter(games,home_score>-1) #completed games
+
+games_sc <- data.frame(scale(select_if(games_c, is.numeric))) #scaled for mean 0 and sd 1
+games_sc$winner_01 <- as.numeric(games_c$winner_01)
+```
+
+```{r}
+#for comparing models
+test_models <- function(models,data,actual,name_list,custom=c(),custom_names=c()){
+  standings <- data.frame()
+  for(model in models){
+    preds <- predict(model,data, type="response")
+    LL <- logLoss(actual,preds)
+    pc <- 1-mean(abs((preds>0.5)-actual))
+    profit <- compute_profitability(data$winner_01,data$home_moneyline,data$away_moneyline,preds)
+    
+    results <- data.frame(LogLoss=LL,
+                          Perc.correct=pc,
+                          profit=profit)
+    standings <- rbind(standings, results)
+  }
+  all_names_list <- name_list
+  if(length(custom) > 0){
+    for(i in 1:length(custom)){
+      preds <- custom[,i]
+      LL <- logLoss(actual,preds)
+      pc <- 1-mean(abs((preds>0.5)-actual))
+      profit <- compute_profitability(data$winner_01,data$home_moneyline,data$away_moneyline,preds)
+      
+      results <- data.frame(LogLoss=LL,
+                          Perc.correct=pc,
+                          profit=profit)
+      standings <- rbind(standings, results)
+      all_names_list <- append(all_names_list,custom_names[i])
+    }
+  }
+  standings$names=all_names_list
+  print(arrange(standings,LogLoss))
+  print(arrange(standings,desc(Perc.correct)))
+  print(arrange(standings,desc(profit)))
+}
+```
+
+```{r}
+games_ml <- filter(games_c,
+                   mean_moneyline_prob>0) #games that have ml data
+
+#one variable models
+mod_pdd <- glm(winner_01 ~ point_diff_diff, family = binomial, data=games_ml)
+mod_wd <- glm(winner_01 ~ wins_diff, family = binomial, data=games_ml)
+mod_wpd <- glm(winner_01 ~ win_perc_diff, family = binomial, data=games_ml)
+mod_yppdd <- glm(winner_01 ~ ypp_diff_diff, family = binomial, data=games_ml)
+
+mod_sp <- glm(winner_01 ~ spread_line, family = binomial, data=games_ml)
+mod_3 <- glm(winner_01 ~ (ypp_diff_diff+point_diff_diff+wins_diff)^3, family = binomial, data=games_ml)
+
+test_models(mget(c('mod_pdd','mod_wd','mod_wpd','mod_yppdd','mod_sp','mod_3')),games_ml,games_ml$winner_01,
+            c('point_diff_diff','wins_diff','win_perc_diff','ypp_diff_diff','spread_line_model','inter_3_model'),
+            custom=data.frame(constant=list(rep(mean(games_ml$winner_01),length(games_ml$winner_01))),
+                              moneyline=games_ml$mean_moneyline_prob),
+            custom_names=c('constant','moneyline'))
+```
+
+## Comparing over time
+
+```{r}
+get_preds_df <- function(training_years=4,
+                         testing_year=2024,
+                         stop_training='year'){
+  if(stop_training=='never'){
+    train_data <- filter(games_ml,season %in% (testing_year-training_years):testing_year)
+    test_data <- filter(games_ml,season==testing_year)
+  }
+  if(stop_training=='year'){
+    train_data <- filter(games_ml,season %in% (testing_year-training_years):(testing_year-1))
+    test_data <- filter(games_ml,season==testing_year)
+  }
+  #if(stop_training=='week'){
+  #  train_data <- filter(games_ml,
+  #                       season %in% (testing_year-training_years):(testing_year-1) | 
+  #                         (season == testing_year & week < curr_week)) #shit... will need to retrain models each week, lets revisit this later...
+  #  test_data <- filter(games_ml,season==testing_year)
+  #}
+  
+    
+  summary_df <- select(test_data,c('game_id','home_score','away_score','spread_line',
+                                    'winner_ha','winner_01','home_moneyline','away_moneyline',
+                                   'mean_moneyline_prob'))
+  summary_df <- summary_df %>% 
+    mutate()
+  
+  #edit models here
+  summary_df$pr_mod_point_dd <- predict(glm(winner_01 ~ point_diff_diff, 
+                                           family = binomial, data=train_data),
+                                       test_data,type='response')
+  summary_df$pr_mod_wins_dif <- predict(glm(winner_01 ~ wins_diff, 
+                                           family = binomial, data=train_data),
+                                       test_data,type='response')
+  summary_df$pr_mod_pdd_wd_i <- predict(glm(winner_01 ~ (wins_diff+point_diff_diff)^2, 
+                                           family = binomial, data=train_data),
+                                       test_data,type='response')
+  summary_df$pr_mod_all_2i_no_vegas <- predict(glm(winner_01 ~ (wins_diff+
+                                                                  rest_diff+
+                                                                  home_incoming_points_scored_pg+
+                                                                  home_incoming_points_allowed_pg+
+                                                                  away_incoming_points_scored_pg+
+                                                                  away_incoming_points_allowed_pg+
+                                                                  home_incoming_ypp+
+                                                                  home_incoming_ypp_a+
+                                                                  away_incoming_ypp+
+                                                                  away_incoming_ypp_a)^2, 
+                                           family = binomial, data=train_data),
+                                       test_data,type='response')
+  summary_df$pr_mod_OF <- predict(glm(winner_01 ~ (spread_line+
+                                                    point_diff_diff+
+                                                    wins_diff+
+                                                    rest_diff+
+                                                    mean_moneyline_prob)^5, 
+                                           family = binomial, data=train_data),
+                                       test_data,type='response')
+    
+  #edit "custom" predictions here
+  summary_df$pr_constant <- mean(train_data$winner_01)
+  
+  summary_df$pr_moneyline <- test_data$mean_moneyline_prob
+  
+  summary_df$pr_home <- .999
+  
+  summary_df$pr_away <- .001
+  
+  summary_df$pr_fav <- (test_data$mean_moneyline_prob > 0.5)*.998 +.001
+  
+  summary_df$pr_dog <- 1 - summary_df$pr_fav
+  return(summary_df)
+}
+```
+
+```{r}
+get_preds_df()
+```
+
+### Profitability against the moneylines, including the house edge
+
+```{r}
+#compute profit for single game
+compute_profit <- function(result, ml_home, ml_away, bet){
+  if((bet>0) & (result==1)){
+    if(ml_home>0){
+      return(bet/100*ml_home)
+    }
+    return(100/abs(ml_home)*bet)
+  }
+  if((bet<0) & (result==0)){
+    if(ml_away>0){
+      return(abs(bet/100*ml_away))
+    }
+    return(abs(100/abs(ml_away)*bet))
+  }
+  return(-abs(bet))
+}
+
+#profitabilty for many games, can return
+compute_profitability <- function(results,ml_home,ml_away,preds, extra_info=c()){
+  ml_hi <- ifelse(ml_home>0 , 100 / (ml_home+100) , abs(ml_home) / (abs(ml_home)+100) )
+  ml_lo <- 1-ifelse(ml_away>0 , 100 / (ml_away+100) , abs(ml_away) / (abs(ml_away)+100) )
+  
+  to_bet <- ifelse(preds>ml_hi , 1,
+                       ifelse(preds<ml_lo, -1, 0)) #home=1, away=-1, none = 0 (consider adjusting amount here)
+  
+  profits <- c()
+  for(i in 1:length(results)){
+    profits[i] <- compute_profit(results[i],ml_home[i],ml_away[i],to_bet[i])
+  }
+  if(length(extra_info)==0){
+    return(sum(profits)/sum(abs(to_bet)))
+  }
+  to_return <- data.frame(extra_info=extra_info,
+                          home_win = results,
+                          ml_home=ml_home,
+                          ml_away=ml_away,
+                          ml_hi=ml_hi,
+                          ml_lo=ml_lo,
+                          preds=preds,
+                          to_bet=to_bet,
+                          profits=profits)
+  return(to_return)
+}
+
+#consider adjusting bet amount to how much predicted is different from ml
+```
+
+```{r}
+compute_profit(0,134,-124,-1) #The weird 2020 game had an error?
+```
+
+
+```{r}
+#example
+compute_profitability(games_ml$winner_01,games_ml$home_moneyline,games_ml$away_moneyline,
+                      predict(glm(winner_01 ~ point_diff_diff, 
+                                           family = binomial, data=games_ml),
+                                       games_ml,type='response'),
+                      extra_info = games_ml$game_id)
+```
+
+```{r}
+get_year_summaries <- function(training_years=4,
+                               years=2010:2024){
+  return_df <- data.frame()
+  for(year in years){
+    summary_df <- get_preds_df(training_years = training_years, testing_year=year)
+    year_sum_df <- data.frame()
+    for (name in names(summary_df)) {
+      if(startsWith(name,'pr_')){
+        accuracy <- mean((select(summary_df,name)>0.5) == summary_df$winner_01)
+        log_loss <- logLoss(summary_df$winner_01 , select(summary_df,name)[,1])
+        profit <- compute_profitability(summary_df$winner_01,
+                                        summary_df$home_moneyline,
+                                        summary_df$away_moneyline,
+                                        select(summary_df,name))
+        
+        method_sum <- data.frame(year=year, method=name, 
+                                 accuracy=accuracy, 
+                                 log_loss=log_loss,
+                                 profit=profit)
+        year_sum_df <- rbind(year_sum_df,method_sum)
+      }
+    }
+    return_df <- rbind(return_df,year_sum_df)
+  }
+  return(return_df)
+}
+```
+
+```{r}
+year_sum_df <- get_year_summaries(years=2010:2024)
+
+ggplot(year_sum_df,aes(x=year, y=profit ,color=method)) + geom_line() + geom_point() +
+  ylim(-.25,.25) +
+  labs(title = 'Betting Methods Profit by Year')+
+  scale_color_brewer(palette = "Set1")
+```
+
+
+### visualize model probs vs. vegas probs
+
+
+```{r}
+year <- 2023
+training_years <- 3
+
+df <- get_preds_df(training_years=training_years, testing_year=year)
+
+prof_df <- compute_profitability(df$winner_01,
+                      df$home_moneyline,
+                      df$away_moneyline,
+                      df$pr_mod_all_2i_no_vegas, #change model here if desired
+                      extra_info=select(df,c(game_id, home_score, away_score, winner_ha,mean_moneyline_prob)))
+
+#prof_df$profits[prof_df$profits == 0] <- NA
+color.values = c('-1'="red",'0'='grey','1'="green")
+p<- ggplot(prof_df,aes(x=extra_info.mean_moneyline_prob, 
+                       text=paste(extra_info.game_id, "<br>", extra_info.away_score,"-",extra_info.home_score,
+                                  "<br> Profit:",profits), 
+                       color=factor(sign(profits)),
+                       shape=extra_info.winner_ha,
+                       size=abs(profits)))+
+  geom_point(aes(y=preds), alpha=0.5)+
+  geom_abline(slope=1, intercept=0, alpha=0.2) +
+  geom_hline(yintercept=.5, alpha=0.2)+
+  geom_vline(xintercept=.5, alpha=0.2)+
+  labs(title=paste('Total Profit',round(100*sum(prof_df$profits)/sum(abs(prof_df$to_bet)),2),'%'))+
+  #scale_shape_manual(values = c('home'='H','away'='A'))+
+  scale_color_manual(values=color.values)
+  #scale_color_gradient2(midpoint = 0, low = "red", mid = "grey", high = "green")
+  #scale_color_gradientn(colours = c("red", "grey", "green"),
+  #                     values = scales::rescale(c(min(prof_df$profits), -0.1, 0, 0.1, max(prof_df$profits))))
+
+ggplotly(p, tooltip="text")
+```
+
+
+```{r}
+games <- games %>% mutate(
+  home_incoming_points_scored_pg = home_incoming_points_scored / (home_incoming_games+.001),
+  away_incoming_points_scored_pg = away_incoming_points_scored / (away_incoming_games+.001),
+  home_incoming_points_allowed_pg = home_incoming_points_allowed / (home_incoming_games+.001),
+  away_incoming_points_allowed_pg = away_incoming_points_allowed / (away_incoming_games+.001),
+)
+
+games_c <- filter(games,home_score>-1) #completed games
+
+games_sc <- data.frame(scale(select_if(games_c, is.numeric))) #scaled for mean 0 and sd 1
+games_sc$winner_01 <- as.numeric(games_c$winner_01)
+
+mod <- glm(winner_01 ~ (wins_diff+
+                  rest_diff+
+                  home_incoming_points_scored_pg+
+                  home_incoming_points_allowed_pg+
+                  away_incoming_points_scored_pg+
+                  away_incoming_points_allowed_pg+
+                  home_incoming_ypp+
+                  home_incoming_ypp_a+
+                  away_incoming_ypp+
+                  away_incoming_ypp_a)^2, 
+                  family = binomial, data=games_sc)
+
+data.frame(mod$coefficients) %>% arrange(-mod.coefficients)
+```
+
+## Randomized betting (p-value style comparison)
+
+```{r}
+trials <- 1000
+rand_profit_results <- data.frame(trial = 1:trials)
+
+for(year in 2006:2023){
+  year_games <- filter(games_ml,season==year,home_score>-1)
+  profits <- c()
+  for(i in 1:trials){
+    rand_picks <- sample(c(-1,1),nrow(year_games),replace=TRUE)
+    profits[i] <- compute_profitability(year_games$winner_01,
+                                          year_games$home_moneyline,
+                                          year_games$away_moneyline,
+                                          rand_picks)
+  }
+  col_name <- paste0('',year)
+  rand_profit_results[[col_name]] <- profits
+}
+
+colMeans(rand_profit_results)
+```
+
+```{r}
+#compute simple betting strategy summaries for each year
+strategy_summarys <- data.frame()
+
+for(year in 2007:2023){
+  year_games <- filter(games_ml,season==year,home_score>-1, game_type=='REG')
+  profits <- c()
+  bet_home <- compute_profitability(year_games$winner_01,year_games$home_moneyline,year_games$away_moneyline,
+                                    rep(1,nrow(year_games)))
+  bet_away <- compute_profitability(year_games$winner_01,year_games$home_moneyline,year_games$away_moneyline,
+                                    rep(0,nrow(year_games)))
+  bet_fav <- compute_profitability(year_games$winner_01,year_games$home_moneyline,year_games$away_moneyline,
+                                    ifelse(year_games$mean_moneyline_prob>.5 , 1, 0))
+  bet_dog <- compute_profitability(year_games$winner_01,year_games$home_moneyline,year_games$away_moneyline,
+                                    ifelse(year_games$mean_moneyline_prob<.5 , 1, 0))
+  bet_home_dog <- compute_profitability(year_games$winner_01,year_games$home_moneyline,year_games$away_moneyline,
+                                    ifelse(year_games$mean_moneyline_prob<.5 , 1, year_games$mean_moneyline_prob))
+  
+  #start here
+  year_sum <- data.frame(year = year,
+                         bet_home = bet_home,
+                         bet_away = bet_away,
+                         bet_fav = bet_fav,
+                         bet_dog = bet_dog,
+                         bet_home_dog = bet_home_dog)
+  
+  strategy_summarys <- rbind(strategy_summarys,year_sum)
+}
+
+ggplot(strategy_summarys,aes(x=year))+
+  geom_line(aes(y=bet_home,color='home'))+
+  geom_line(aes(y=bet_away,color='away'))+
+  geom_line(aes(y=bet_fav,color='fav'))+
+  geom_line(aes(y=bet_dog,color='dog'))+
+  geom_line(aes(y=bet_home_dog,color='home dog'))+
+  geom_point(aes(y=bet_home,color='home'))+
+  geom_point(aes(y=bet_away,color='away'))+
+  geom_point(aes(y=bet_fav,color='fav'))+
+  geom_point(aes(y=bet_dog,color='dog'))+
+  geom_point(aes(y=bet_home_dog,color='home dog'))+
+  labs(title = 'Profitability of simple bet strategies', y='Profit')
+```
+
+
+Ideas:
+
+Incorporate into model from existing data
+- pagerank
+- weather?
+- strength of schedule (interacting?)
+- QB or coach change (from week 1?)
+- Current streak
+- Record in previous x games
+- head to head record for last x years
+- Coming off big win/loss?
+- Playoff implications
+- Long travel
+- new variables for last x games
+
+
+Find additional data (NFLfastR?)
+- yards per play
+- passing/rushing yards
+- turnovers
+- Problems with NFLfastR 
+  - missing 1999 week 1 bal stl (and others?)
+  - tries to revert to modern names, but weird things seem to happen
+    - STL/LA plays itself in 1999 week 4
+
+
+Actually vs. Vegas
+- not just binary, but prob/odds
+- compare to moneyline
+- see if profitable (only bet strong difference games?)
+- what about always bet home/away or fav/dog team?
+- look at distributions of models probs vs. vegas probs
+- distribution of % return for random guesses
+- odds shopping
+
+
+Computations/visualizations
+- plot densities of variables
+- randomize picks to compute p-value-ish things
+- really limit training data to games prior
+- track year by year
+- track over course of year
+- train also on previous year?

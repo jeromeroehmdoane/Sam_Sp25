@@ -21,11 +21,6 @@ library(nflfastR)
 library(Metrics)
 ```
 
-```{r}
-2+2
-
-10+10
-```
 
 ##Import data from NFLverse
 

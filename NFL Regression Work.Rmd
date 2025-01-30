@@ -214,8 +214,8 @@ games <- games %>%
   mutate(ypp_diff_diff = home_incoming_ypp_diff - away_incoming_ypp_diff)
 
 
-#turnovers
-select(filter(games, abs(ypp_diff_diff)>4),'game_id','home_incoming_ypp','home_incoming_ypp_a','away_incoming_ypp','away_incoming_ypp_a','ypp_diff_diff')
+#turnovers, created, given up, then difference, then difference differential
+
 
 
 #penalties
@@ -398,8 +398,6 @@ for(seasoni in 1999:2023){
     }
     }
 }
-
-
 
 ```
 

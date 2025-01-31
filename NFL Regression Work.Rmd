@@ -19,6 +19,8 @@ library(plotly)
 library(gapminder)
 library(nflfastR)
 library(Metrics)
+install.packages('igraph')
+library(igraph)
 ```
 
 
@@ -216,59 +218,51 @@ games <- games %>%
 
 #turnovers, created, given up, then difference, then difference differential
 
-get_turnovers_created <- function(season_num,
+get_turnovers_forced <- function(season_num,
                              week_num,
                              team_name){
   prior_games <- all_fastR_team_stats %>% filter(team==team_name,season==season_num,week<week_num)
   prior_games <- mutate(prior_games,
-                  turnovers_created = "NEED VARIABLES HERE",
-                  tot_yards = "MAY NOT NEED THIS")
-  if(sum(prior_games$plays)>0){
-    return(sum(prior_games$tot_yards)/sum(prior_games$plays))
-  }
-  return(5)
+                  turnovers_forced = fumble_recovery_opp + def_interceptions)
+  return(sum(prior_games$turnovers_forced))
 }
 
-get_turovers_givenup <- function(season_num,
+get_turnovers_lost <- function(season_num,
                                week_num,
                                team_name){
   prior_games <- all_fastR_team_stats %>% filter(opponent_team==team_name,season==season_num,week<week_num)
   prior_games <- mutate(prior_games,
-                  turnovers_givenup = "NEED VARIABLES HERE",
-                  tot_yards = "MAY NOT NEED THIS")
-  if(sum(prior_games$plays)>0){
-    return(sum(prior_games$tot_yards)/sum(prior_games$plays))
-  }
-  return(5)
+                  turnovers_lost = fumble_recovery_opp + def_interceptions)
+  return(sum(prior_games$turnovers_lost))
 }
 
-home_turnovers_created <- c()
-home__turnovers_givenup <- c()
-away_turnovers_created <- c()
-away_turnovers_givenup <- c()
+home_turnovers_forced <- c()
+home_turnovers_lost <- c()
+away_turnovers_forced <- c()
+away_turnovers_lost <- c()
 
 for (i in 1:nrow(games)) {
-  home_turnovers_created[i] <- get_turnovers_created(games[i,]$season,
+  home_turnovers_forced[i] <- get_turnovers_forced(games[i,]$season,
                              games[i,]$week,
                              games[i,]$home_team)
-  home_turnovers_givenup[i] <- get_turnovers_givenup(games[i,]$season,
+  home_turnovers_lost[i] <- get_turnovers_lost(games[i,]$season,
                                  games[i,]$week,
                                  games[i,]$home_team)
-  away_turnovers_created[i] <- get_turnovers_created(games[i,]$season,
+  away_turnovers_forced[i] <- get_turnovers_forced(games[i,]$season,
                              games[i,]$week,
                              games[i,]$away_team)
-  away_turnovers_givenup[i] <- get_turnovers_givenup(games[i,]$season,
+  away_turnovers_lost[i] <- get_turnovers_lost(games[i,]$season,
                                  games[i,]$week,
                                  games[i,]$away_team)
 }
-games$home_turnovers_created <- home_turnovers_created
-games$home_incoming_ypp_a <- home_turovers_givenup
-games$away_incoming_ypp <- away_turnovers_created
-games$away_incoming_ypp_a <- away_turnovers_givenup
+games$home_turnovers_forced <- home_turnovers_forced
+games$home_turnovers_lost <- home_turnovers_lost
+games$away_turnovers_forced <- away_turnovers_forced
+games$away_turnovers_lost <- away_turnovers_lost
 
 games <- games %>% 
-  mutate(home_turnovers_diff = home_turnovers_created - home_turnovers_givenup) %>% 
-  mutate(away_turnovers_diff = away_turnovers_created - away_turnovers_givenup) %>%
+  mutate(home_turnovers_diff = home_turnovers_forced - home_turnovers_lost) %>% 
+  mutate(away_turnovers_diff = away_turnovers_forced - away_turnovers_lost) %>%
   mutate(turnovers_diff_diff = home_turnovers_diff - away_turnovers_diff)
 
 
@@ -844,6 +838,20 @@ ggplot(strategy_summarys,aes(x=year))+
   geom_point(aes(y=bet_dog,color='dog'))+
   geom_point(aes(y=bet_home_dog,color='home dog'))+
   labs(title = 'Profitability of simple bet strategies', y='Profit')
+```
+
+
+##Eigenvalues and Page Rank
+```{r}
+get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       #week means including that
+  #ij entry means that i beat j by 7 if 7 is entry
+  prior_games <- filter(game_dataset, season==season_wanted, week<=week_wanted)
+  all_teams <- sort(unique(c(prior_games$away_team, prior_games$home_team)))
+  
+}
+
+
+
 ```
 
 

@@ -847,11 +847,31 @@ get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       
   #ij entry means that i beat j by 7 if 7 is entry
   prior_games <- filter(game_dataset, season==season_wanted, week<=week_wanted)
   all_teams <- sort(unique(c(prior_games$away_team, prior_games$home_team)))
+  teams_matrix <- data.frame(matrix(0,nrow=32, ncol=32), row.names = all_teams)
+  colnames(teams_matrix) <- all_teams
   
+  for (i in 1:nrow(prior_games)) {
+    result <- prior_games[i,]$result
+    home <- prior_games[i,]$home_team
+    away <- prior_games[i,]$away_team
+    if (result > 0){
+      teams_matrix[home, away] <- result + teams_matrix[home,away]
+    }else{
+      teams_matrix[away,home] <- abs(result) + teams_matrix[away,home]
+  }
+  
+
+  }
+    return(teams_matrix)
 }
 
+get_results_matrix(2023,5,games)
+
+filter(games, season == 2023)
 
 
+
+#translate 
 ```
 
 

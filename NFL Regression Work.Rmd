@@ -19,7 +19,6 @@ library(plotly)
 library(gapminder)
 library(nflfastR)
 library(Metrics)
-install.packages('igraph')
 library(igraph)
 ```
 
@@ -452,7 +451,7 @@ for(seasoni in 1999:2023){
 ```{r}
 mod_wpd <- glm(winner_01 ~ win_perc_diff, family = binomial, data=games)
 
-densityPlot(mod_wpd$fitted.values)
+densitypPlot(mod_wpd$fitted.values)
 mean((mod_wpd$fitted.values>.5)==games$winner_01)
 mean(games$winner_01)
 
@@ -870,8 +869,29 @@ get_results_matrix(2023,5,games)
 filter(games, season == 2023)
 
 
+get_pagerank <- function(season_wanted, week_wanted, game_dataset){
+  
+  prior_games <- filter(game_dataset, season==season_wanted, week<=week_wanted)
+  all_teams <- sort(unique(c(prior_games$away_team, prior_games$home_team)))
+  teams_matrix <- data.frame(matrix(0,nrow=32, ncol=32), row.names = all_teams)
+  colnames(teams_matrix) <- all_teams
+  
+  for (i in 1:nrow(prior_games)) {
+    result <- prior_games[i,]$result
+    home <- prior_games[i,]$home_team
+    away <- prior_games[i,]$away_team
+    if (result > 0){
+      teams_matrix[home, away] <- result + teams_matrix[home,away]
+    }else{
+      teams_matrix[away,home] <- abs(result) + teams_matrix[away,home]
+  }
+  
 
-#translate 
+  }
+    return(page_rank(graph_from_adjacency_matrix(teams_matrix), algo = c("prpack")))
+}
+
+get_pagerank(2023,5,games)
 ```
 
 

@@ -865,33 +865,20 @@ get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       
 }
 
 get_results_matrix(2023,5,games)
+```
 
-filter(games, season == 2023)
 
-
+```{r}
 get_pagerank <- function(season_wanted, week_wanted, game_dataset){
   
-  prior_games <- filter(game_dataset, season==season_wanted, week<=week_wanted)
-  all_teams <- sort(unique(c(prior_games$away_team, prior_games$home_team)))
-  teams_matrix <- data.frame(matrix(0,nrow=32, ncol=32), row.names = all_teams)
-  colnames(teams_matrix) <- all_teams
-  
-  for (i in 1:nrow(prior_games)) {
-    result <- prior_games[i,]$result
-    home <- prior_games[i,]$home_team
-    away <- prior_games[i,]$away_team
-    if (result > 0){
-      teams_matrix[home, away] <- result + teams_matrix[home,away]
-    }else{
-      teams_matrix[away,home] <- abs(result) + teams_matrix[away,home]
-  }
-  
+  teams_matrix <- get_results_matrix(season_wanted, week_wanted, game_dataset)
+  graph_adj_matrix <- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
+  plot(graph_adj_matrix)
+  return(page_rank(graph_adj_matrix, algo = c("prpack")))
 
-  }
-    return(page_rank(graph_from_adjacency_matrix(teams_matrix), algo = c("prpack")))
 }
 
-get_pagerank(2023,5,games)
+get_pagerank(2023,21,games)
 ```
 
 

@@ -427,10 +427,6 @@ ggplot(games_sum_wd_d, aes(x=wins_diff,y=home_win_perc,weight=count, color=as.fa
 ```
 
 ```{r}
-
-```
-
-```{r}
 #problems with NFLfastR
 get_incoming_ypp(1999,
                  2,
@@ -451,7 +447,7 @@ for(seasoni in 1999:2023){
 ```{r}
 mod_wpd <- glm(winner_01 ~ win_perc_diff, family = binomial, data=games)
 
-densitypPlot(mod_wpd$fitted.values)
+densityplot(mod_wpd$fitted.values)
 mean((mod_wpd$fitted.values>.5)==games$winner_01)
 mean(games$winner_01)
 
@@ -869,16 +865,100 @@ get_results_matrix(2023,5,games)
 
 
 ```{r}
-get_pagerank <- function(season_wanted, week_wanted, game_dataset){
-  
+get_pagerank <- function(season_wanted, week_wanted, game_dataset, show_graph = FALSE){
+  if(week_wanted == 0){
+    all_teams <- sort(unique(c(game_dataset$away_team, game_dataset$home_team)))
+    pr_matrix <- data.frame(matrix(1/32, nrow = 1, ncol = length(all_teams)))
+    colnames(pr_matrix) <- all_teams
+    return(pr_matrix)
+  }
   teams_matrix <- get_results_matrix(season_wanted, week_wanted, game_dataset)
   graph_adj_matrix <- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
-  plot(graph_adj_matrix)
-  return(page_rank(graph_adj_matrix, algo = c("prpack")))
+  if (show_graph == TRUE){
+    plot(graph_adj_matrix)
+  }
+  return(data.frame(t(page_rank(graph_adj_matrix, algo = c("prpack"))$vector)))
 
 }
 
-get_pagerank(2023,21,games)
+get_pagerank(2023,1,games)
+
+```
+
+```{r}
+teams_matrix <- get_results_matrix(2023, 5, games)
+graph_adj_matrix <- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
+```
+
+```{r}
+#1 NFC N - DET, MIN, GB, CHI 
+#2 NFC S - TB, ATL, CAR, NO
+#3 AFC S - HOU, IND, JAX, TEN
+#4 AFC N - BAL, PIT, CIN, CLE
+#5 AFC W - KC, LAC, DEN, LV
+#6 AFC E - BUF, MIA, NYJ, NE
+#7 NFC E - PHI, WSH, DAL, NYG
+#8 NFC W - LA, SEA, ARI, SF
+
+teams_list <- list(list('DET','MIN', 'GB', 'CHI'),
+                   list('TB','ATL', 'CAR', 'NO'),
+                   list('HOU','IND', 'JAX', 'TEN'),
+                   list('BAL', 'PIT', 'CIN', 'CLE'),
+                   list('KC', 'LAC', 'DEN', 'LV'),
+                   list('BUF', 'MIA', 'NYJ', 'NE'),
+                   list('PHI', 'WSH', 'DAL', 'NYG'),
+                   list('LA', 'SEA', 'ARI', 'SF'))
+teams_teams <- c('DET','MIN', 'GB', 'CHI',
+                  'TB','ATL', 'CAR', 'NO',
+                   'HOU','IND', 'JAX', 'TEN',
+                   'BAL', 'PIT', 'CIN', 'CLE',
+                   'KC', 'LAC', 'DEN', 'LV',
+                   'BUF', 'MIA', 'NYJ', 'NE',
+                   'PHI', 'WSH', 'DAL', 'NYG',
+                   'LA', 'SEA', 'ARI', 'SF')
+
+xs<-c()
+ys<-c()
+for(n in 1:8){
+  xs[n] <- cos(n * pi / 4 - pi / 8)
+  ys[n]<-sin(n * pi / 4 - pi / 8)
+}
+centers <- Map(c,xs,ys)
+r <- .1
+m <- matrix(,nrow = 2, ncol = 32)
+teams_position <- data.frame(m)
+colnames(teams_position) <- teams_teams
+
+for (n in 1:8){
+  for ( ti in 1:4){
+    angle <- (ti*pi/2 - pi/4) + (n * pi / 4 - pi / 8)
+    x_coor <- centers[[n]][1] + r*cos(angle)
+    y_coor <- centers[[n]][2] + r*sin(angle)
+    teams_position[paste(teams_list[[n]][ti])] <- c(x_coor, y_coor)
+  }
+}
+
+teams_position
+
+plot(as.numeric(teams_position[1,]),as.numeric(teams_position[2,]))
+```
+
+```{r}
+#adding pr to games
+home_pagerank <- c()
+away_pagerank <- c()
+for (i in 1:nrow(games)) {
+  home_pagerank[i] <- as.numeric(get_pagerank(games[i,]$season,
+                             games[i,]$week-1,
+                             games)[games[i,]$home_team])
+  away_pagerank[i] <- as.numeric(get_pagerank(games[i,]$season,
+                                 games[i,]$week-1,
+                                 games)[games[i,]$away_team])
+}
+games$home_pagerank <- home_pagerank
+games$away_pagerank <- away_pagerank
+
+games$home_pagerank
 ```
 
 

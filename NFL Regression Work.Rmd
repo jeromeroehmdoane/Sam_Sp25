@@ -838,6 +838,7 @@ ggplot(strategy_summarys,aes(x=year))+
 
 ##Eigenvalues and Page Rank
 ```{r}
+#-------------------(GET RESULTS MATRIX)-------------------------------
 get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       #week means including that
   #ij entry means that i beat j by 7 if 7 is entry
   prior_games <- filter(game_dataset, season==season_wanted, week<=week_wanted)
@@ -861,13 +862,19 @@ get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       
 }
 
 get_results_matrix(2023,5,games)
-```
 
+#--------------------------------(GET PAGE RANK)------------------------------------------
 
-```{r}
 get_pagerank <- function(season_wanted, week_wanted, game_dataset, show_graph = FALSE){
   if(week_wanted == 0){
-    all_teams <- sort(unique(c(game_dataset$away_team, game_dataset$home_team)))
+    all_teams <- sort (c('DET','MIN', 'GB', 'CHI',
+                  'TB','ATL', 'CAR', 'NO',
+                   'HOU','IND', 'JAX', 'TEN',
+                   'BAL', 'PIT', 'CIN', 'CLE',
+                   'KC', 'LAC', 'DEN', 'LV',
+                   'BUF', 'MIA', 'NYJ', 'NE',
+                   'PHI', 'WSH', 'DAL', 'NYG',
+                   'LA', 'SEA', 'ARI', 'SF'))
     pr_matrix <- data.frame(matrix(1/32, nrow = 1, ncol = length(all_teams)))
     colnames(pr_matrix) <- all_teams
     return(pr_matrix)
@@ -883,14 +890,11 @@ get_pagerank <- function(season_wanted, week_wanted, game_dataset, show_graph = 
 
 get_pagerank(2023,1,games)
 
-```
+#----------------------------(Plotting 1 week)---------------------
 
-```{r}
-teams_matrix <- get_results_matrix(2023, 5, games)
-graph_adj_matrix <- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
-```
+teams_matrix <- get_results_matrix(2023, 5, final_games)
+g<- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
 
-```{r}
 #1 NFC N - DET, MIN, GB, CHI 
 #2 NFC S - TB, ATL, CAR, NO
 #3 AFC S - HOU, IND, JAX, TEN
@@ -906,7 +910,7 @@ teams_list <- list(list('DET','MIN', 'GB', 'CHI'),
                    list('BAL', 'PIT', 'CIN', 'CLE'),
                    list('KC', 'LAC', 'DEN', 'LV'),
                    list('BUF', 'MIA', 'NYJ', 'NE'),
-                   list('PHI', 'WSH', 'DAL', 'NYG'),
+                   list('PHI', 'WAS', 'DAL', 'NYG'),
                    list('LA', 'SEA', 'ARI', 'SF'))
 teams_teams <- c('DET','MIN', 'GB', 'CHI',
                   'TB','ATL', 'CAR', 'NO',
@@ -914,17 +918,17 @@ teams_teams <- c('DET','MIN', 'GB', 'CHI',
                    'BAL', 'PIT', 'CIN', 'CLE',
                    'KC', 'LAC', 'DEN', 'LV',
                    'BUF', 'MIA', 'NYJ', 'NE',
-                   'PHI', 'WSH', 'DAL', 'NYG',
+                   'PHI', 'WAS', 'DAL', 'NYG',
                    'LA', 'SEA', 'ARI', 'SF')
 
 xs<-c()
 ys<-c()
 for(n in 1:8){
   xs[n] <- cos(n * pi / 4 - pi / 8)
-  ys[n]<-sin(n * pi / 4 - pi / 8)
+  ys[n] <- sin(n * pi / 4 - pi / 8)
 }
 centers <- Map(c,xs,ys)
-r <- .1
+r <- .2
 m <- matrix(,nrow = 2, ncol = 32)
 teams_position <- data.frame(m)
 colnames(teams_position) <- teams_teams
@@ -938,18 +942,90 @@ for (n in 1:8){
   }
 }
 
-teams_position
+team_colors <- list(
+  DET = list(primary = "#0076B6", secondary = "#B0B7BC"),  # Detroit Lions
+  MIN = list(primary = "#4F2683", secondary = "#FFC62F"),  # Minnesota Vikings
+  GB = list(primary = "#203731", secondary = "#FFB81C"),  # Green Bay Packers
+  CHI = list(primary = "#0B162A", secondary = "#FB4F14"),  # Chicago Bears
+  TB = list(primary = "#D50A0A", secondary = "#8A8D8F"),  # Tampa Bay Buccaneers
+  ATL = list(primary = "#A71930", secondary = "#000000"),  # Atlanta Falcons
+  CAR = list(primary = "#0085CA", secondary = "#000000"),  # Carolina Panthers
+  NO = list(primary = "#D3BC8D", secondary = "#000000"),  # New Orleans Saints
+  HOU = list(primary = "#03202F", secondary = "#C8102E"),  # Houston Texans
+  IND = list(primary = "#003D73", secondary = "#FFFFFF"),  # Indianapolis Colts
+  JAX = list(primary = "#006778", secondary = "#000000"),  # Jacksonville Jaguars
+  TEN = list(primary = "#000080", secondary = "#006F92"),  # Tennessee Titans
+  BAL = list(primary = "#68228B", secondary = "#000000"),  # Baltimore Ravens
+  PIT = list(primary = "#FFB81C", secondary = "#101820"),  # Pittsburgh Steelers
+  CIN = list(primary = "#FB4F14", secondary = "#000000"),  # Cincinnati Bengals
+  CLE = list(primary = "#311D00", secondary = "#FF3C00"),  # Cleveland Browns
+  KC = list(primary = "#E31837", secondary = "#FFB81C"),  # Kansas City Chiefs
+  LAC = list(primary = "#0085CA", secondary = "#FFC72C"),  # Los Angeles Chargers
+  DEN = list(primary = "#002244", secondary = "#FB4F14"),  # Denver Broncos
+  LV = list(primary = "#101820", secondary = "#B5B8B1"),  # Las Vegas Raiders
+  BUF = list(primary = "#00338D", secondary = "#C60C30"),  # Buffalo Bills
+  MIA = list(primary = "#008E97", secondary = "#F58220"),  # Miami Dolphins
+  NYJ = list(primary = "#117A65", secondary = "#FFFFFF"),  # New York Jets
+  NE = list(primary = "#002244", secondary = "#C60C30"),  # New England Patriots
+  PHI = list(primary = "#004C54", secondary = "#A5ACAF"),  # Philadelphia Eagles
+  WAS = list(primary = "#772C1F", secondary = "#FFB81C"),  # Washington Commanders
+  DAL = list(primary = "#0060A9", secondary = "#86949D"),  # Dallas Cowboys
+  NYG = list(primary = "#0B2265", secondary = "#AA0000"),  # New York Giants
+  LA  = list(primary = "#0047AB", secondary = "#FFD100"),  # Los Angeles Rams
+  SEA = list(primary = "#002A5C", secondary = "#69BE28"),  # Seattle Seahawks
+  ARI = list(primary = "#CD0000", secondary = "#000000"),  # Arizona Cardinals
+  SF  = list(primary = "#AA0000", secondary = "#B3995D")   # San Francisco 49ers
+)
 
-plot(as.numeric(teams_position[1,]),as.numeric(teams_position[2,]))
+
+vertex_colors <- sapply(V(g)$name, function(team) team_colors[[team]]$primary)
+border_colors <- sapply(V(g)$name, function(team) team_colors[[team]]$secondary)
+layout_matrix <- t(as.matrix(teams_position[, match(V(g)$name, colnames(teams_position))]))
+
+teams <- V(g)$name
+
+# Create a named vector for PageRank values from final_games
+team_pagerank <- setNames(final_games$home_pagerank, final_games$home_team)
+team_pagerank <- c(team_pagerank, setNames(final_games$away_pagerank, final_games$away_team))
+
+# Assign PageRank values to vertices, using a fallback for missing values
+week_team_prank <- sapply(teams, function(team) team_pagerank[team] %||% mean(team_pagerank, na.rm = TRUE))
+
+# Normalize sizes for better visualization (optional)
+week_team_prank <- scales::rescale(week_team_prank, to = c(10, 40))  # Adjust range as needed
+
+plot.igraph(g, 
+  vertex.label = V(g)$name,               
+  vertex.label.color = border_colors,           
+  vertex.size = week_team_prank,                        
+  vertex.label.cex = .7,
+  vertex.color = vertex_colors,            
+  vertex.frame.color = border_colors,      
+  vertex.shape = "circle",                 
+  edge.arrow.size = 0.5,                   
+  edge.color = rgb(0,0,0,.35),                    
+  edge.width = E(g)$weight /5,
+  edge.alpha = .1,
+  edge.curved = FALSE,                      
+  layout = layout_matrix              
+)
+
+#------------------(Function to plot specific week)---------------------
+
+byweekviz <- function()
+
 ```
 
+
+
+THIS WAS USED TO APPEND THE PAGE RANK TO DATA THEN MAKE FINAL GAMES
 ```{r}
 #adding pr to games
 home_pagerank <- c()
 away_pagerank <- c()
 for (i in 1:nrow(games)) {
   home_pagerank[i] <- as.numeric(get_pagerank(games[i,]$season,
-                             games[i,]$week-1,
+                             games[i,]$week-1 ,
                              games)[games[i,]$home_team])
   away_pagerank[i] <- as.numeric(get_pagerank(games[i,]$season,
                                  games[i,]$week-1,
@@ -959,6 +1035,92 @@ games$home_pagerank <- home_pagerank
 games$away_pagerank <- away_pagerank
 
 games$home_pagerank
+
+games[i,]
+
+```
+```{r}
+library(dplyr)
+library(igraph)
+
+get_results_matrix <- function(season_wanted, week_wanted, game_dataset) {
+  prior_games <- filter(game_dataset, season == season_wanted, week <= week_wanted)
+  all_teams <- sort(unique(c(game_dataset$home_team, game_dataset$away_team)))  # Ensuring all teams are included
+  num_teams <- length(all_teams)
+  
+  teams_matrix <- matrix(0, nrow = num_teams, ncol = num_teams, 
+                         dimnames = list(all_teams, all_teams))
+  
+  for (i in 1:nrow(prior_games)) {
+    result <- prior_games$result[i]
+    home <- prior_games$home_team[i]
+    away <- prior_games$away_team[i]
+    
+    if (result > 0) {
+      teams_matrix[home, away] <- teams_matrix[home, away] + result
+    } else {
+      teams_matrix[away, home] <- teams_matrix[away, home] + abs(result)
+    }
+  }
+  
+  return(as.data.frame(teams_matrix))
+}
+
+get_pagerank <- function(season_wanted, week_wanted, game_dataset, show_graph = FALSE) {
+  if (week_wanted == 0) {
+    all_teams <- sort(unique(c(game_dataset$home_team, game_dataset$away_team)))
+    pr_matrix <- data.frame(matrix(1/length(all_teams), nrow = 1, ncol = length(all_teams)))
+    colnames(pr_matrix) <- all_teams
+    return(pr_matrix)
+  }
+  
+  teams_matrix <- get_results_matrix(season_wanted, week_wanted, game_dataset)
+  graph_adj_matrix <- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
+  
+  if (show_graph) {
+    plot(graph_adj_matrix)
+  }
+  
+  pr_vector <- page_rank(graph_adj_matrix, algo = "prpack")$vector
+  pr_matrix <- data.frame(t(pr_vector))
+  colnames(pr_matrix) <- colnames(teams_matrix)  # Ensure correct team names
+  
+  return(pr_matrix)
+}
+
+# Pre-allocate vectors
+home_pagerank <- numeric(nrow(games))
+away_pagerank <- numeric(nrow(games))
+
+for (i in 1:nrow(games)) {
+  season <- games$season[i]
+  week <- games$week[i] - 1
+  home_team <- games$home_team[i]
+  away_team <- games$away_team[i]
+  
+  pr_table <- get_pagerank(season, week, games)
+  
+  if (home_team %in% colnames(pr_table)) {
+    home_pagerank[i] <- as.numeric(pr_table[home_team])
+  } else {
+    home_pagerank[i] <- 1/length(unique(c(games$home_team, games$away_team)))  # Default if missing
+  }
+  
+  if (away_team %in% colnames(pr_table)) {
+    away_pagerank[i] <- as.numeric(pr_table[away_team])
+  } else {
+    away_pagerank[i] <- 1/length(unique(c(games$home_team, games$away_team)))  # Default if missing
+  }
+}
+
+games$home_pagerank <- home_pagerank
+games$away_pagerank <- away_pagerank
+
+games
+```
+
+```{r}
+final_games <- read.csv("~/GitHub/Sam_Sp25/final_games.csv", stringsAsFactors=TRUE)
 ```
 
 

@@ -20,6 +20,7 @@ library(gapminder)
 library(nflfastR)
 library(Metrics)
 library(igraph)
+library(dplyr)
 ```
 
 
@@ -503,7 +504,7 @@ test_models <- function(models,data,actual,name_list,custom=c(),custom_names=c()
 ```
 
 ```{r}
-games_ml <- filter(games_c,
+games_ml <- filter(final_games,
                    mean_moneyline_prob>0) #games that have ml data
 
 #one variable models
@@ -515,8 +516,10 @@ mod_yppdd <- glm(winner_01 ~ ypp_diff_diff, family = binomial, data=games_ml)
 mod_sp <- glm(winner_01 ~ spread_line, family = binomial, data=games_ml)
 mod_3 <- glm(winner_01 ~ (ypp_diff_diff+point_diff_diff+wins_diff)^3, family = binomial, data=games_ml)
 
-test_models(mget(c('mod_pdd','mod_wd','mod_wpd','mod_yppdd','mod_sp','mod_3')),games_ml,games_ml$winner_01,
-            c('point_diff_diff','wins_diff','win_perc_diff','ypp_diff_diff','spread_line_model','inter_3_model'),
+mod_pr <- glm(winner_01 ~ pagerank_diff, family = binomial, data = games_ml)
+
+test_models(mget(c('mod_pdd','mod_wd','mod_wpd','mod_yppdd','mod_sp','mod_3', 'mod_pr')),games_ml,games_ml$winner_01,
+            c('point_diff_diff','wins_diff','win_perc_diff','ypp_diff_diff','spread_line_model','inter_3_model', 'PageRank_Model'),
             custom=data.frame(constant=list(rep(mean(games_ml$winner_01),length(games_ml$winner_01))),
                               moneyline=games_ml$mean_moneyline_prob),
             custom_names=c('constant','moneyline'))
@@ -547,8 +550,7 @@ get_preds_df <- function(training_years=4,
   summary_df <- select(test_data,c('game_id','home_score','away_score','spread_line',
                                     'winner_ha','winner_01','home_moneyline','away_moneyline',
                                    'mean_moneyline_prob'))
-  summary_df <- summary_df %>% 
-    mutate()
+
   
   #edit models here
   summary_df$pr_mod_point_dd <- predict(glm(winner_01 ~ point_diff_diff, 
@@ -579,7 +581,9 @@ get_preds_df <- function(training_years=4,
                                                     mean_moneyline_prob)^5, 
                                            family = binomial, data=train_data),
                                        test_data,type='response')
-    
+  summary_df$pr_mod_pr <- predict(glm(winner_01 ~ pagerank_diff, family = binomial, data = train_data), test_data, type = 'response')  
+  
+  
   #edit "custom" predictions here
   summary_df$pr_constant <- mean(train_data$winner_01)
   
@@ -842,13 +846,26 @@ ggplot(strategy_summarys,aes(x=year))+
 get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       #week means including that
   #ij entry means that i beat j by 7 if 7 is entry
   prior_games <- filter(game_dataset, season==season_wanted, week<=week_wanted)
-  all_teams <- sort(unique(c(prior_games$away_team, prior_games$home_team)))
+  prior_games$home_team <- as.character(prior_games$home_team)
+  prior_games$away_team <- as.character(prior_games$away_team)
+  all_teams <- as.character(sort (c('DET','MIN', 'GB', 'CHI',
+                  'TB','ATL', 'CAR', 'NO',
+                   'HOU','IND', 'JAX', 'TEN',
+                   'BAL', 'PIT', 'CIN', 'CLE',
+                   'KC', 'LAC', 'DEN', 'LV',
+                   'BUF', 'MIA', 'NYJ', 'NE',
+                   'PHI', 'WAS', 'DAL', 'NYG',
+                   'LA', 'SEA', 'ARI', 'SF')))
   teams_matrix <- data.frame(matrix(0,nrow=32, ncol=32), row.names = all_teams)
   colnames(teams_matrix) <- all_teams
   
+  if (week_wanted==0){
+    return(teams_matrix)
+  }
+  
   for (i in 1:nrow(prior_games)) {
     result <- prior_games[i,]$result
-    home <- prior_games[i,]$home_team
+    home <- prior_games[i,]$home_tea
     away <- prior_games[i,]$away_team
     if (result > 0){
       teams_matrix[home, away] <- result + teams_matrix[home,away]
@@ -861,7 +878,7 @@ get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       
     return(teams_matrix)
 }
 
-get_results_matrix(2023,5,games)
+get_results_matrix(2023,0,final_games)
 
 #--------------------------------(GET PAGE RANK)------------------------------------------
 
@@ -892,7 +909,6 @@ get_pagerank(2023,1,games)
 
 #----------------------------(Plotting 1 week)---------------------
 
-teams_matrix <- get_results_matrix(2023, 5, final_games)
 g<- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
 
 #1 NFC N - DET, MIN, GB, CHI 
@@ -1009,13 +1025,119 @@ plot.igraph(g,
   edge.curved = FALSE,                      
   layout = layout_matrix              
 )
-
-#------------------(Function to plot specific week)---------------------
-
-byweekviz <- function()
-
 ```
 
+```{r}
+#------------------(Function to plot specific week)---------------------
+
+team_colors <- list(
+  DET = list(primary = "#0076B6", secondary = "#B0B7BC"),  # Detroit Lions
+  MIN = list(primary = "#4F2683", secondary = "#FFC62F"),  # Minnesota Vikings
+  GB = list(primary = "#203731", secondary = "#FFB81C"),  # Green Bay Packers
+  CHI = list(primary = "#0B162A", secondary = "#FB4F14"),  # Chicago Bears
+  TB = list(primary = "#D50A0A", secondary = "#8A8D8F"),  # Tampa Bay Buccaneers
+  ATL = list(primary = "#A71930", secondary = "#000000"),  # Atlanta Falcons
+  CAR = list(primary = "#0085CA", secondary = "#000000"),  # Carolina Panthers
+  NO = list(primary = "#D3BC8D", secondary = "#000000"),  # New Orleans Saints
+  HOU = list(primary = "#03202F", secondary = "#C8102E"),  # Houston Texans
+  IND = list(primary = "#003D73", secondary = "#FFFFFF"),  # Indianapolis Colts
+  JAX = list(primary = "#006778", secondary = "#000000"),  # Jacksonville Jaguars
+  TEN = list(primary = "#000080", secondary = "#006F92"),  # Tennessee Titans
+  BAL = list(primary = "#68228B", secondary = "#000000"),  # Baltimore Ravens
+  PIT = list(primary = "#FFB81C", secondary = "#101820"),  # Pittsburgh Steelers
+  CIN = list(primary = "#FB4F14", secondary = "#000000"),  # Cincinnati Bengals
+  CLE = list(primary = "#311D00", secondary = "#FF3C00"),  # Cleveland Browns
+  KC = list(primary = "#E31837", secondary = "#FFB81C"),  # Kansas City Chiefs
+  LAC = list(primary = "#0085CA", secondary = "#FFC72C"),  # Los Angeles Chargers
+  DEN = list(primary = "#002244", secondary = "#FB4F14"),  # Denver Broncos
+  LV = list(primary = "#101820", secondary = "#B5B8B1"),  # Las Vegas Raiders
+  BUF = list(primary = "#00338D", secondary = "#C60C30"),  # Buffalo Bills
+  MIA = list(primary = "#008E97", secondary = "#F58220"),  # Miami Dolphins
+  NYJ = list(primary = "#117A65", secondary = "#FFFFFF"),  # New York Jets
+  NE = list(primary = "#002244", secondary = "#C60C30"),  # New England Patriots
+  PHI = list(primary = "#004C54", secondary = "#A5ACAF"),  # Philadelphia Eagles
+  WAS = list(primary = "#772C1F", secondary = "#FFB81C"),  # Washington Commanders
+  DAL = list(primary = "#0060A9", secondary = "#86949D"),  # Dallas Cowboys
+  NYG = list(primary = "#0B2265", secondary = "#AA0000"),  # New York Giants
+  LA  = list(primary = "#0047AB", secondary = "#FFD100"),  # Los Angeles Rams
+  SEA = list(primary = "#002A5C", secondary = "#69BE28"),  # Seattle Seahawks
+  ARI = list(primary = "#CD0000", secondary = "#000000"),  # Arizona Cardinals
+  SF  = list(primary = "#AA0000", secondary = "#B3995D")   # San Francisco 49ers
+)
+
+byweekviz <- function(season_wanted, week_wanted, game_dataset){
+  
+  teams_matrix <- get_results_matrix(season_wanted, week_wanted, game_dataset)
+  g<- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
+  teams <- V(g)$name
+  
+  week_team_prank <- get_pagerank(season_wanted, week_wanted, game_dataset)
+  week_team_prank <- scales::rescale(as.numeric(week_team_prank), to = c(10, 40),from = c(0,.2))
+  
+  vertex_colors <- sapply(teams, function(team) team_colors[[team]]$primary)
+  border_colors <- sapply(teams, function(team) team_colors[[team]]$secondary)
+  layout_matrix <- t(as.matrix(teams_position[, match(teams, colnames(teams_position))]))
+  
+  return(plot.igraph(g, 
+  vertex.label = teams,               
+  vertex.label.color = border_colors,           
+  vertex.size = week_team_prank,                        
+  vertex.label.cex = .7,
+  vertex.color = vertex_colors,            
+  vertex.frame.color = border_colors,      
+  vertex.shape = "circle",                 
+  edge.arrow.size = 0.5,                   
+  edge.color = rgb(0,0,0,.35),                    
+  edge.width = E(g)$weight /5,
+  edge.curved = FALSE,                      
+  layout = layout_matrix)              
+)
+  
+}
+
+byweekviz(2003,5,final_games)
+
+
+seasonviz <- function(season_wanted, week_wanted, game_dataset) {
+  if (!dir.exists("PageRankViz")) {
+    dir.create("PageRankViz")
+  }
+  
+  for (week in 0:week_wanted) {
+    file_name <- sprintf("PageRankViz/%d_Week%d.png", season_wanted, week)
+
+    tryCatch({
+      png(filename = file_name, width = 800, height = 800)
+      byweekviz(season_wanted, week, game_dataset)
+      dev.off()
+    }, error = function(e) {
+      message("Error in png(): ", e$message)
+    })
+  }
+}
+
+seasonviz(2004, 21, final_games)
+```
+
+```{r}
+#pagerank logistic regression
+
+final_games$pagerank_diff <- final_games$home_pagerank - final_games$away_pagerank
+
+final_games_sum_pr <- final_games %>%
+  group_by(round(pagerank_diff,2)) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_pr, aes(x=`round(pagerank_diff, 2)`,y=home_win_perc, weight = count)) +
+         geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_pr,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=TRUE) +
+  labs(title = 'Logistic Model for Home PageRank', y='Home Win Prob')
+```
 
 
 THIS WAS USED TO APPEND THE PAGE RANK TO DATA THEN MAKE FINAL GAMES
@@ -1039,9 +1161,8 @@ games$home_pagerank
 games[i,]
 
 ```
+
 ```{r}
-library(dplyr)
-library(igraph)
 
 get_results_matrix <- function(season_wanted, week_wanted, game_dataset) {
   prior_games <- filter(game_dataset, season == season_wanted, week <= week_wanted)
@@ -1120,7 +1241,287 @@ games
 ```
 
 ```{r}
+get_last5incoming_ypp <- function(season_num,
+                             week_num,
+                             team_name){
+  prior_games <-all_fastR_team_stats %>%
+  filter(team == team_name, 
+         (season == season_num & week < week_num) |  
+         (season == season_num - 1 & week >= week_num)) %>%  
+  arrange(season, week)%>%  
+  tail(5) 
+  
+  prior_games <- mutate(prior_games,
+                  plays = attempts + sacks_suffered + carries,
+                  tot_yards = passing_yards + rushing_yards + sack_yards_lost)
+  if(sum(prior_games$plays)>0){
+    return(sum(prior_games$tot_yards)/sum(prior_games$plays))
+  }
+}
+
+get_last5incoming_ypp_a <- function(season_num,
+                             week_num,
+                             team_name){
+  prior_games <-all_fastR_team_stats %>%
+  filter(team == team_name, 
+         (season == season_num & week < week_num) |  
+         (season == season_num - 1 & week >= week_num)) %>%  
+  arrange(season, week)%>%  
+  tail(5) 
+
+  prior_games <- mutate(prior_games,
+                  plays = attempts + sacks_suffered + carries,
+                  tot_yards = passing_yards + rushing_yards + sack_yards_lost)
+  if(sum(prior_games$plays)>0){
+    return(sum(prior_games$tot_yards)/sum(prior_games$plays))
+  }
+}
+
+
+get_last10results_matrix <- function(season_num, week_num, game_dataset) {
+  prior_games <- filter(game_dataset, 
+         (season == season_num & week < week_num) |  
+         (season == season_num - 1 & week >= week_num)) %>%  
+  arrange(season, week)%>%  
+  tail(160) 
+  all_teams <- as.character(sort (c('DET','MIN', 'GB', 'CHI',
+                  'TB','ATL', 'CAR', 'NO',
+                   'HOU','IND', 'JAX', 'TEN',
+                   'BAL', 'PIT', 'CIN', 'CLE',
+                   'KC', 'LAC', 'DEN', 'LV',
+                   'BUF', 'MIA', 'NYJ', 'NE',
+                   'PHI', 'WAS', 'DAL', 'NYG',
+                   'LA', 'SEA', 'ARI', 'SF')))
+  all_teams <- sort(unique(c(game_dataset$home_team, game_dataset$away_team)))  # Ensuring all teams are included
+  num_teams <- length(all_teams)
+  
+  teams_matrix <- matrix(0, nrow = num_teams, ncol = num_teams, 
+                         dimnames = list(all_teams, all_teams))
+  
+  for (i in 1:nrow(prior_games)) {
+    result <- prior_games$result[i]
+    home <- prior_games$home_team[i]
+    away <- prior_games$away_team[i]
+    
+    if (result > 0) {
+      teams_matrix[home, away] <- teams_matrix[home, away] + result
+    } else {
+      teams_matrix[away, home] <- teams_matrix[away, home] + abs(result)
+    }
+  }
+  
+  return(as.data.frame(teams_matrix))
+}
+
+get_last10_pagerank <- function(season_wanted, week_wanted, game_dataset, show_graph = FALSE) {
+  if (week_wanted == 0) {
+    all_teams <- sort(unique(c(game_dataset$home_team, game_dataset$away_team)))
+    pr_matrix <- data.frame(matrix(1/length(all_teams), nrow = 1, ncol = length(all_teams)))
+    colnames(pr_matrix) <- all_teams
+    return(pr_matrix)
+  }
+  
+  teams_matrix <- get_last10results_matrix(season_wanted, week_wanted, game_dataset)
+  graph_adj_matrix <- graph_from_adjacency_matrix(t(data.matrix(teams_matrix)), weighted = TRUE)
+  
+  pr_vector <- page_rank(graph_adj_matrix, algo = "prpack")$vector
+  pr_matrix <- data.frame(t(pr_vector))
+  colnames(pr_matrix) <- colnames(teams_matrix)  # Ensure correct team names
+  
+  return(pr_matrix)
+}
+```
+
+
+```{r}
+n_games <- nrow(final_games)
+
+last5_home_wins <- c()
+last5_away_wins <- c()
+
+last5_home_pointsscored <- c()
+last5_away_pointsscored <- c()
+
+last5_home_pointsallowed <-c()
+last5_away_pointsallowed <-c()
+
+last5_home_ypp <- c()
+last5_away_ypp <- c()
+
+last5_home_ypp_a <- c()
+last5_away_ypp_a <- c()
+
+last10_home_pagerank <- numeric(nrow(final_games))
+last10_away_pagerank <- numeric(nrow(final_games))
+
+
+for (i in 1:n_games) {
+  cur_home_team <- final_games[i, ]$home_team
+  cur_away_team <- final_games[i, ]$away_team
+  cur_week <- final_games[i, ]$week
+  cur_season <- final_games[i, ]$season
+  
+  if (cur_season >=2004){
+  
+  # Last 5 games for home and away team
+  home_last5 <- final_games %>%
+    filter(home_team == cur_home_team | away_team == cur_home_team,
+           season <= cur_season,
+           week <= cur_week | season < cur_season) %>%
+    arrange(season, week) %>%
+    tail(5)
+
+  away_last5 <- final_games %>%
+    filter(home_team == cur_away_team | away_team == cur_away_team,
+           season <= cur_season,
+           week < cur_week | season < cur_season) %>%
+    arrange(season, week) %>%
+    tail(5)
+
+  # Wins in last 5
+  last5_home_wins[i] <- sum(as.character(home_last5$winner_team) == as.character(cur_home_team))
+  last5_away_wins[i] <- sum(as.character(away_last5$winner_team) == as.character(cur_away_team))
+
+  
+
+  # Points scored and allowed - Home
+  total_points <- 0
+  total_points_allowed <- 0
+  for (j in 1:nrow(home_last5)) {
+    if (home_last5$home_team[j]== cur_home_team) {
+      total_points <- total_points + home_last5$home_score[j]
+      total_points_allowed <- total_points_allowed + home_last5$away_score[j]
+    } else {
+      total_points <- total_points + home_last5$away_score[j]
+      total_points_allowed <- total_points_allowed + home_last5$home_score[j]
+    }
+  }
+  last5_home_pointsscored[i] <- total_points
+  last5_home_pointsallowed[i] <- total_points_allowed
+  
+  # Points scored and allowed - Away
+  away_total_points <- 0
+  away_total_points_allowed <- 0
+  for (j in 1:nrow(away_last5)) {
+    if (away_last5$away_team[j] == cur_away_team) {
+      away_total_points <- away_total_points + away_last5$away_score[j]
+      away_total_points_allowed <- away_total_points_allowed + away_last5$home_score[j]
+    } else {
+      away_total_points <- away_total_points + away_last5$home_score[j]
+      away_total_points_allowed <- away_total_points_allowed + away_last5$away_score[j]
+    }
+  }
+  last5_away_pointsscored[i] <- away_total_points
+  last5_away_pointsallowed[i] <- away_total_points_allowed
+  
+  #Home and Away Last 5 Yards Per Play Allowed
+  last5_home_ypp[i] <- get_last5incoming_ypp(season_num=cur_season, 
+                                             week_num=cur_week,
+                                             team_name=cur_home_team)
+  last5_home_ypp_a[i] <- get_last5incoming_ypp_a(season_num=cur_season,
+                                                 week_num=cur_week,
+                                                 team_name=cur_home_team)
+  last5_away_ypp[i] <- get_last5incoming_ypp(season_num=cur_season,
+                             week_num=cur_week,
+                             team_name=cur_away_team)
+  last5_away_ypp_a[i] <- get_last5incoming_ypp_a(season_num=cur_season,
+                                 week_num=cur_week,
+                                 team_name=cur_away_team)
+    
+  #home team last 10 wins
+  cur_home_team = final_games[i, ]$home_team
+  cur_week = final_games[i, ]$week
+  cur_season = final_games[i, ]$season
+  home_last10 <- filter(final_games, home_team==cur_home_team | away_team==cur_home_team)%>%
+    tail(10)
+  last10_wins_home[i] <- sum(home_last10$winner_team == cur_home_team)
+  
+  #away team last 10 wins
+  cur_away_team = final_games[i, ]$away_team
+  away_last10 <- filter(final_games, home_team==cur_away_team | away_team==cur_away_team)%>%
+    tail(10)
+  last10_wins_away[i] <- sum(away_last10$winner_team == cur_away_team)
+    
+  #Home and Away Last 10 Page Rank 
+    season <- final_games$season[i]
+    week <- final_games$week[i] -1 
+    home_team <- cur_home_team
+    away_team <- cur_away_team
+  
+      pr_table <- get_last10_pagerank(season, week, final_games)
+  
+      if (cur_home_team %in% colnames(pr_table)) {
+        last10_home_pagerank[i] <- as.numeric(pr_table[cur_home_team])
+      } else {
+        last10_home_pagerank[i] <- 1/length(unique(c(games$cur_home_team, games$cur_away_team)))  # Default if missing
+      }
+  
+      if (cur_away_team %in% colnames(pr_table)) {
+        last10_away_pagerank[i] <- as.numeric(pr_table[cur_away_team])
+    } else {
+        last10_away_pagerank[i] <- 1/length(unique(c(games$cur_home_team, games$cur_away_team)))  # Default if missing
+    }
+  }
+  else {
+      last5_home_wins[i] <- 0
+      last5_away_wins[i] <- 0
+      last5_home_pointsscored[i] <- 0
+      last5_home_pointsallowed[i] <- 0
+      last5_away_pointsscored[i] <- 0
+      last5_away_pointsallowed[i] <- 0
+      last5_home_ypp[i] <- 0
+      last5_home_ypp_a[i] <- 0
+      last5_away_ypp[i] <- 0
+      last5_away_ypp_a[i] <- 0
+      last10_wins_home[i] <- 0
+      last10_wins_away[i] <- 0
+      last10_home_pagerank[i] <- 0
+      last10_away_pagerank[i] <- 0
+  }
+}
+
+
+final_games <- final_games %>%
+  mutate(
+    last5_home_wins = last5_home_wins,
+    last5_away_wins = last5_away_wins,
+    last5_home_pointsscored = last5_home_pointsscored,
+    last5_home_pointsallowed = last5_home_pointsallowed,
+    last5_away_pointsscore = last5_away_pointsscore,
+    last5_away_pointsallowed = last5_away_pointsallowed,
+    last5_home_incoming_ypp = last5_home_ypp,
+    last5_home_incoming_ypp_a = last5_home_ypp_a,
+    last5_away_incoming_ypp = last5_away_ypp,
+    last5_away_incoming_ypp_a = last5_away_ypp_a,
+    last5_home_incoming_ypp_diff = home_ypp - home_incoming_ypp_a,
+    last5_away_incoming_ypp_diff = away_ypp - away_incoming_ypp_a,
+    last5_ypp_diff_diff = (home_ypp - home_incoming_ypp_a) - (away_ypp - away_incoming_ypp_a),
+    last10_wins_home = last10_wins_home,
+    last10_wins_away = last10_wins_away,
+    last10_home_pagerank = last10_home_pagerank,
+    last10_away_pagerank = last10_away_pagerank
+  )
+
+```
+
+```{r}
+get_last5incoming_ypp(season_num=2004, 
+                                             week_num=1,
+                                             team_name="NE")
+```
+
+```{r}
 final_games <- read.csv("~/GitHub/Sam_Sp25/final_games.csv", stringsAsFactors=TRUE)
+```
+
+```{r}
+rescale(c(1,2,3,4,5,6,7,8,9,10)/10, to = c(10, 20), from = c(0,.2))
+library("scales")
+
+min(final_games$home_pagerank)
+min(final_games$away_pagerank)
+
+
 ```
 
 

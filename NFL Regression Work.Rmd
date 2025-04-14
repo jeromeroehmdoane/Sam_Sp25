@@ -149,7 +149,7 @@ games <- games %>%
 
 #### adding more variables with NFLfastR
 ```{r}
-#takes a few minutes to run
+#takes a few minutes to run, 4 minutes and 31 seconds to be exact
 all_fastR_team_stats <- calculate_stats(
   seasons = TRUE,
   summary_level = 'week',
@@ -264,14 +264,6 @@ games <- games %>%
   mutate(home_turnovers_diff = home_turnovers_forced - home_turnovers_lost) %>% 
   mutate(away_turnovers_diff = away_turnovers_forced - away_turnovers_lost) %>%
   mutate(turnovers_diff_diff = home_turnovers_diff - away_turnovers_diff)
-
-
-#penalties
-
-
-
-#passing and rushing epa
-
 ```
 
 ## Plotting variable distributions
@@ -425,7 +417,215 @@ ggplot(games_sum_wd_d, aes(x=wins_diff,y=home_win_perc,weight=count, color=as.fa
               method.args = c(family = "binomial"),
               se=FALSE) +
   labs(title = 'Logistic Model for Home Winning by Wins Diff and Divisional Game', y='Home Win Prob')
+
 ```
+
+```{r}
+#models and plots for last5 wins home and away
+final_games_sum_last5win_home <- final_games %>%
+  group_by(last5_home_wins) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5win_home, aes(x=last5_home_wins,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5win_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Home Wins', y='Home Win Prob')
+
+final_games_sum_last5win_away <- final_games %>%
+  group_by(last5_away_wins) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5win_away, aes(x=last5_away_wins,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5win_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Away Wins', y='Home Win Prob')
+
+#models and plots for last5 points scored home and away
+last5_away_pointsscored <- c()
+
+final_games_sum_last5ps_home <- final_games %>%
+  group_by(last5_home_pointsscored) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5ps_home, aes(x=last5_home_pointsscored,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5ps_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Games Points Scored', y='Home Win Prob')
+
+final_games_sum_last5ps_away <- final_games %>%
+  group_by(last5_away_pointsscored) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5ps_away, aes(x=last5_away_pointsscored,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5ps_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Points Scored from Away', y='Home Win Prob')
+
+#models and plots for last5 points allowed home and away
+final_games_sum_last5pa_home <- final_games %>%
+  group_by(last5_home_pointsallowed) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5pa_home, aes(x=last5_home_pointsallowed,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5pa_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Games Points Allowed from Home', y='Home Win Prob')
+
+final_games_sum_last5pa_away <- final_games %>%
+  group_by(last5_away_pointsallowed) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5pa_away, aes(x=last5_away_pointsallowed,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5pa_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Points Scored from Away', y='Home Win Prob')
+
+#models and plots for last5 yards per play home and away
+final_games_sum_last5ypp_home <- final_games %>%
+  group_by(last5_home_incoming_ypp) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5ypp_home, aes(x=last5_home_incoming_ypp,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5ypp_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Home Incoming Yards per Play', y='Home Win Prob')
+
+final_games_sum_last5ypp_away <- final_games %>%
+  group_by(last5_away_incoming_ypp) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5ypp_away, aes(x=last5_away_incoming_ypp,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5ypp_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Away Incoming Yards per Play', y='Home Win Prob')
+
+#models and plots for last5 yards per play against home and away
+final_games_sum_last5yppa_home <- final_games %>%
+  group_by(last5_home_incoming_ypp_a) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5yppa_home, aes(x=last5_home_incoming_ypp_a,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5yppa_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Games Yards Per Play Against for Home', y='Home Win Prob')
+
+final_games_sum_last5yppa_away <- final_games %>%
+  group_by(last5_away_incoming_ypp_a) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last5yppa_away, aes(x=last5_away_incoming_ypp_a,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last5yppa_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 5 Games Yards Per Play Against from Away', y='Home Win Prob')
+#models and plots for last10 wins home and away
+final_games_sum_last10win_home <- final_games %>%
+  group_by(last10_wins_home) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last10win_home, aes(x=last10_wins_home,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last10win_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 10 Home Wins', y='Home Win Prob')
+
+final_games_sum_last10win_away <- final_games %>%
+  group_by(last10_wins_away) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last10win_away, aes(x=last10_wins_away,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last10win_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 10 Away Wins', y='Home Win Prob')
+
+#models and plots for last10 PageRank home and away
+final_games_sum_last10pr_home <- final_games %>%
+  group_by(last10_home_pagerank) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last10pr_home, aes(x=last10_home_pagerank,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last10pr_home,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 10 Home PageRank', y='Home Win Prob')
+
+final_games_sum_last10pr_away <- final_games %>%
+  group_by(last10_away_pagerank) %>% 
+  summarize(home_win_perc = mean(winner_01),
+            count = n())
+
+ggplot(final_games_sum_last10pr_away, aes(x=last10_away_pagerank,y=home_win_perc,weight=count)) +
+  geom_point(aes(size=count),alpha=0.5)+
+  geom_smooth(data = final_games_sum_last10pr_away,
+              method='glm',
+              formula = y ~ x,
+              method.args = c(family = "binomial"),
+              se=FALSE) +
+  labs(title = 'Logistic Model for Home Winning by Last 10 Away PageRank', y='Home Win Prob')
+```
+
 
 ```{r}
 #problems with NFLfastR
@@ -504,7 +704,7 @@ test_models <- function(models,data,actual,name_list,custom=c(),custom_names=c()
 ```
 
 ```{r}
-games_ml <- filter(final_games,
+games_ml <- filter(games,
                    mean_moneyline_prob>0) #games that have ml data
 
 #one variable models
@@ -878,7 +1078,6 @@ get_results_matrix <- function(season_wanted, week_wanted, game_dataset){       
     return(teams_matrix)
 }
 
-get_results_matrix(2023,0,final_games)
 
 #--------------------------------(GET PAGE RANK)------------------------------------------
 
@@ -905,7 +1104,6 @@ get_pagerank <- function(season_wanted, week_wanted, game_dataset, show_graph = 
 
 }
 
-get_pagerank(2023,1,games)
 
 #----------------------------(Plotting 1 week)---------------------
 
@@ -1351,6 +1549,9 @@ last5_away_ypp <- c()
 last5_home_ypp_a <- c()
 last5_away_ypp_a <- c()
 
+last10_wins_home <- c()
+last10_wins_away <- c()
+
 last10_home_pagerank <- numeric(nrow(final_games))
 last10_away_pagerank <- numeric(nrow(final_games))
 
@@ -1434,13 +1635,13 @@ for (i in 1:n_games) {
   cur_season = final_games[i, ]$season
   home_last10 <- filter(final_games, home_team==cur_home_team | away_team==cur_home_team)%>%
     tail(10)
-  last10_wins_home[i] <- sum(home_last10$winner_team == cur_home_team)
+  last10_wins_home[i] <- sum(as.character(home_last10$winner_team) == as.character(cur_home_team))
   
   #away team last 10 wins
   cur_away_team = final_games[i, ]$away_team
   away_last10 <- filter(final_games, home_team==cur_away_team | away_team==cur_away_team)%>%
     tail(10)
-  last10_wins_away[i] <- sum(away_last10$winner_team == cur_away_team)
+  last10_wins_away[i] <- sum(as.character(away_last10$winner_team) == as.character(cur_away_team))
     
   #Home and Away Last 10 Page Rank 
     season <- final_games$season[i]
@@ -1487,7 +1688,7 @@ final_games <- final_games %>%
     last5_away_wins = last5_away_wins,
     last5_home_pointsscored = last5_home_pointsscored,
     last5_home_pointsallowed = last5_home_pointsallowed,
-    last5_away_pointsscore = last5_away_pointsscore,
+    last5_away_pointsscored = last5_away_pointsscored,
     last5_away_pointsallowed = last5_away_pointsallowed,
     last5_home_incoming_ypp = last5_home_ypp,
     last5_home_incoming_ypp_a = last5_home_ypp_a,
@@ -1505,6 +1706,11 @@ final_games <- final_games %>%
 ```
 
 ```{r}
+write.csv(final_games, "~/GitHub/Sam_Sp25/final_games.csv", row.names = FALSE)
+```
+
+
+```{r}
 get_last5incoming_ypp(season_num=2004, 
                                              week_num=1,
                                              team_name="NE")
@@ -1520,8 +1726,6 @@ library("scales")
 
 min(final_games$home_pagerank)
 min(final_games$away_pagerank)
-
-
 ```
 
 
